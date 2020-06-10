@@ -35,6 +35,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -98,6 +99,8 @@ type config struct {
 	Services         map[string]map[string]interface{} `mapstructure:"services"`
 	Interceptors     map[string]map[string]interface{} `mapstructure:"interceptors"`
 	EnableReflection bool                              `mapstructure:"enable_reflection"`
+	TLSKeyFile       string                            `mapstructure:"tls_key_file"`
+	TLSPemFile       string                            `mapstructure:"tls_pem_file"`
 }
 
 // Server is a gRPC server.
@@ -107,6 +110,7 @@ type Server struct {
 	listener net.Listener
 	log      zerolog.Logger
 	services map[string]Service
+	insecure bool
 }
 
 // NewServer returns a new Server.
@@ -125,7 +129,12 @@ func NewServer(m interface{}, log zerolog.Logger) (*Server, error) {
 		conf.Address = "localhost:9999"
 	}
 
-	server := &Server{conf: conf, log: log, services: map[string]Service{}}
+	var insecure bool
+	if conf.TLSKeyFile == "" || conf.TLSPemFile == "" {
+		insecure = true
+	}
+
+	server := &Server{conf: conf, log: log, services: map[string]Service{}, insecure: insecure}
 
 	return server, nil
 }
@@ -192,6 +201,15 @@ func (s *Server) registerServices() error {
 		return err
 	}
 	opts = append(opts, grpc.StatsHandler(&ocgrpc.ServerHandler{}))
+
+	if !s.insecure {
+		creds, err := credentials.NewServerTLSFromFile(s.conf.TLSPemFile, s.conf.TLSKeyFile)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, grpc.Creds(creds))
+	}
+
 	grpcServer := grpc.NewServer(opts...)
 	if s.conf.EnableReflection {
 		s.log.Info().Msg("rgrpc: grpc server reflection enabled")

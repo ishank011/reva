@@ -19,6 +19,8 @@
 package pool
 
 import (
+	"crypto/tls"
+
 	appprovider "github.com/cs3org/go-cs3apis/cs3/app/provider/v1beta1"
 	appregistry "github.com/cs3org/go-cs3apis/cs3/app/registry/v1beta1"
 	authprovider "github.com/cs3org/go-cs3apis/cs3/auth/provider/v1beta1"
@@ -37,6 +39,7 @@ import (
 
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // TODO(labkode): is concurrent access to the maps safe?
@@ -60,7 +63,11 @@ var userProviders = map[string]user.UserAPIClient{}
 // with open census tracing support.
 // TODO(labkode): make grpc tls configurable.
 func NewConn(endpoint string) (*grpc.ClientConn, error) {
-	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{}))
+	config := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	conn, err := grpc.Dial(endpoint, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithStatsHandler(&ocgrpc.ClientHandler{}))
 	if err != nil {
 		return nil, err
 	}
